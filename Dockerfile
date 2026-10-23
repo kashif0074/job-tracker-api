@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+﻿# syntax=docker/dockerfile:1
 
 FROM python:3.12-slim
 
@@ -14,6 +14,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
+
+# Install CPU-only Torch to prevent 3GB+ CUDA downloads
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
+# Install the rest of the requirements
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app

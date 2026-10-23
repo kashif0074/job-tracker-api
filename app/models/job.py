@@ -1,5 +1,6 @@
-from datetime import date, datetime
+﻿from datetime import date, datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import Date, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -21,6 +22,8 @@ class Job(Base):
     technologies: Mapped[str] = mapped_column(Text, default="[]")
     job_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     application_deadline: Mapped[date | None] = mapped_column(Date, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(384), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -30,3 +33,4 @@ class Job(Base):
     )
 
     owner = relationship("User", back_populates="jobs")
+    

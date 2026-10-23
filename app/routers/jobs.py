@@ -14,6 +14,7 @@ from app.schemas.job import (
     JobResponse,
     JobUpdate,
 )
+from app.services.ai_service import get_embedding, extract_skills
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -85,6 +86,7 @@ def create_job(
         technologies=_serialize_technologies(payload.technologies),
         job_url=payload.job_url,
         application_deadline=payload.application_deadline,
+        description=payload.description,
     )
     db.add(job)
     db.commit()
@@ -132,3 +134,72 @@ def delete_job(
     db.delete(job)
     db.commit()
     return None
+
+
+@router.post("/{job_id}/analyze")
+def analyze_job(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    job = _get_owned_job_or_404(db, job_id, current_user)
+    
+    if not job.description:
+        raise HTTPException(status_code=400, detail="Job has no description to analyze")
+        
+    # 1. Extract skills (Groq LLM)
+    skills_dict = extract_skills(job.description)
+    
+    # 2. Generate embedding (Local SentenceTransformer)
+    text_to_embed = f"{job.title} at {job.company}. {job.description}"
+    embedding_vector = get_embedding(text_to_embed)
+    
+    # 3. Save to database
+    job.embedding = embedding_vector
+    db.commit()
+    db.refresh(job)
+    
+    return {
+        "message": "Job analyzed successfully",
+        "extracted_skills": skills_dict,
+        "has_embedding": True
+    }
+
+
+@router.get("/{job_id}/match")
+def match_resume_to_job(
+    job_id: int, 
+    resume_text: str, 
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Calculate the similarity between a resume and a job.
+    Uses pure Python cosine similarity to avoid DB type-casting issues.
+    """
+    job = _get_owned_job_or_404(db, job_id, current_user)
+    
+    if job.embedding is None:
+        raise HTTPException(status_code=400, detail="Run POST /analyze on this job first")
+        
+    # 1. Embed the resume
+    resume_embedding = get_embedding(resume_text)
+    
+    # 2. Ensure job.embedding is a standard list of floats
+    job_embedding = list(job.embedding)
+    
+    # 3. Pure Python Cosine Similarity: dot(A, B) / (||A|| * ||B||)
+    dot_product = sum(a * b for a, b in zip(resume_embedding, job_embedding))
+    mag_a = sum(x * x for x in resume_embedding) ** 0.5
+    mag_b = sum(x * x for x in job_embedding) ** 0.5
+    
+    if mag_a == 0 or mag_b == 0:
+        raise HTTPException(status_code=500, detail="Zero-magnitude embedding error")
+        
+    similarity_score = float(dot_product / (mag_a * mag_b))
+    
+    return {
+        "job_title": job.title,
+        "match_score_percentage": round(similarity_score * 100, 2),
+        "verdict": "Strong Match" if similarity_score > 0.8 else "Weak Match"
+    }

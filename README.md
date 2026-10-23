@@ -293,3 +293,8 @@ MIT — do whatever you want, attribution appreciated.
 ## 👤 Author
 
 **Kashif** — [github.com/kashif0074](https://github.com/kashif0074)
+## 🤖 AI Features
+
+- **Skill Extraction** (`POST /jobs/{id}/analyze`): Uses **Groq (Llama 3)** to extract programming languages, frameworks, AI tools, and experience level from job descriptions.
+- **Resume Matching** (`GET /jobs/{id}/match`): Uses **sentence-transformers** (local CPU embeddings) and **pgvector** for cosine similarity scoring.
+- **100% Free AI Stack**: Local embeddings (CPU-only PyTorch) + Groq free tier. No OpenAI/Gemini API billing required.

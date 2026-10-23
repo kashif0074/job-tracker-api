@@ -15,6 +15,7 @@ class JobCreate(BaseModel):
     technologies: list[str] = Field(default_factory=list)
     job_url: str | None = None
     application_deadline: date | None = None
+    description: str | None = None
 
 
 class JobUpdate(BaseModel):
@@ -26,6 +27,7 @@ class JobUpdate(BaseModel):
     technologies: list[str] | None = None
     job_url: str | None = None
     application_deadline: date | None = None
+    description: str | None = None
 
 
 class JobResponse(BaseModel):
@@ -40,6 +42,7 @@ class JobResponse(BaseModel):
     technologies: list[str] = Field(default_factory=list)
     job_url: str | None
     application_deadline: date | None
+    description: str | None
     created_at: datetime
 
     @field_validator("technologies", mode="before")
