@@ -31,12 +31,14 @@ def extract_skills_from_text(text: str) -> str:
 
 tools = [scrape_job, extract_skills_from_text]
 
-llm = ChatGroq(
-    model="openai/gpt-oss-120b",
-    api_key=os.getenv("GROQ_API_KEY"),
-    temperature=0,
-)
-llm_with_tools = llm.bind_tools(tools)
+def get_llm():
+    """Lazy loader — only initializes when the agent actually runs."""
+    llm = ChatGroq(
+        model="openai/gpt-oss-120b",
+        api_key=os.getenv("GROQ_API_KEY"),
+        temperature=0,
+    )
+    return llm.bind_tools(tools)
 
 
 class AgentState(TypedDict):
@@ -44,7 +46,7 @@ class AgentState(TypedDict):
 
 
 def agent_node(state: AgentState):
-    return {"messages": [llm_with_tools.invoke(state["messages"])]}
+    return {"messages": [get_llm().invoke(state["messages"])]}
 
 
 graph_builder = StateGraph(AgentState)
