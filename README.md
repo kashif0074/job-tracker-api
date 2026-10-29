@@ -315,3 +315,39 @@ MIT — do whatever you want, attribution appreciated.
 `GET /jobs/{id}/match` — Uses **sentence-transformers** embeddings stored in **pgvector** for cosine similarity scoring.
 
 ## 🏗️ Architecture
+## 🧠 Agentic AI Architecture
+
+This API demonstrates a **production-grade Agentic AI pipeline** with 3 integrated AI systems:
+
+### 1. Multi-Step Browser Agent (LangGraph + Playwright)
+`POST /jobs/agent/scrape-and-save?url=<job-url>`
+
+A **LangGraph state machine** with tool-calling:
+- **Plan**: LLM decides which tools to call
+- **Scrape**: Playwright (headless Chromium) navigates and extracts page content
+- **Extract**: Groq (GPT-OSS-120b) parses structured skills via JSON mode
+- **Persist**: Results saved to PostgreSQL + Neo4j
+
+### 2. GraphRAG (Neo4j)
+`GET /jobs/graph/related-skills/{skill}`
+
+Traverses a **knowledge graph** to find skills that co-occur in real job postings:
+```cypher
+MATCH (s1:Skill {name: $skill})<-[:REQUIRES]-(j:Job)-[:REQUIRES]->(s2:Skill)
+RETURN s2.name, count(j) ORDER BY count(j) DESC
+## 📊 Architecture & Workflows
+
+### High-Level Architecture
+Our system uses a multi-service architecture with **FastAPI** for the backend, **PostgreSQL + pgvector** for vector similarity, **Neo4j** for graph traversal, and **Groq** for LLM reasoning.
+
+[View the full architecture diagram](docs/architecture.md)
+
+### Agentic Workflow (LangGraph)
+The browser automation agent is built with a state machine (LangGraph). It uses tool calling to dynamically decide whether to scrape a page, extract skills, or return an error.
+
+![Agent Flow](docs/agent-flow.png)
+
+### Neo4j Knowledge Graph
+Skills are stored as nodes, and jobs as edges. This allows us to query which skills co-occur most frequently in the same job.
+
+*(To generate the Neo4j visualization, open http://localhost:7474, log in with `neo4j/password123`, and run the query `MATCH (n) RETURN n`)*
