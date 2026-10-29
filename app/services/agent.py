@@ -18,8 +18,21 @@ def scrape_job(url: str) -> str:
     result = scrape_job_sync(url)
     if not result["success"]:
         return f"Failed to scrape: {result['error']}"
-    return f"Title: {result['title']}\n\nDescription: {result['description']}"
-
+    
+    description = result["description"]
+    # Detect Cloudflare / bot protection
+    lower_desc = description.lower()
+    block_phrases = [
+        "please verify you are human",
+        "checking your browser",
+        "attention required",
+        "cloudflare",
+        "enable javascript and cookies",
+    ]
+    if any(phrase in lower_desc for phrase in block_phrases):
+        return f"BLOCKED: {url} is protected by Cloudflare or bot detection. Cannot scrape this site."
+    
+    return f"Title: {result['title']}\n\nDescription: {description[:2000]}"
 
 @tool
 def extract_skills_from_text(text: str) -> str:
