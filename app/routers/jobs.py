@@ -3,7 +3,8 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
-
+from pydantic import BaseModel
+from app.services.crew import run_job_application_crew
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.job import Job
@@ -258,3 +259,23 @@ def related_skills(
     """
     skills = get_related_skills(skill)
     return {"skill": skill, "related": skills}
+
+
+class CoverLetterRequest(BaseModel):
+    url: str
+    resume_text: str
+
+
+@router.post("/agent/cover-letter")
+def generate_cover_letter(
+    payload: CoverLetterRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Multi-agent endpoint: Researcher -> Writer -> Critic.
+    """
+    result = run_job_application_crew(payload.url, payload.resume_text)
+    return {
+        "message": "Crew finished successfully",
+        "final_output": result
+    }
