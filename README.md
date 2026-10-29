@@ -298,3 +298,20 @@ MIT — do whatever you want, attribution appreciated.
 - **Skill Extraction** (`POST /jobs/{id}/analyze`): Uses **Groq (Llama 3)** to extract programming languages, frameworks, AI tools, and experience level from job descriptions.
 - **Resume Matching** (`GET /jobs/{id}/match`): Uses **sentence-transformers** (local CPU embeddings) and **pgvector** for cosine similarity scoring.
 - **100% Free AI Stack**: Local embeddings (CPU-only PyTorch) + Groq free tier. No OpenAI/Gemini API billing required.
+## 🧠 Agentic AI Features
+
+### Autonomous Browser Agent
+`POST /jobs/agent/scrape-and-save?url=<job-url>` — A **LangGraph** agent that:
+1. Plans a scraping strategy
+2. Executes **Playwright** browser automation
+3. Extracts text from the page
+4. Calls the **Groq LLM** to parse skills
+5. Saves everything to Postgres + Neo4j
+
+### GraphRAG (Knowledge Graph)
+`GET /jobs/graph/related-skills/{skill}` — Traverses a **Neo4j** knowledge graph to find skills that co-occur in job postings.
+
+### Semantic Resume Matching
+`GET /jobs/{id}/match` — Uses **sentence-transformers** embeddings stored in **pgvector** for cosine similarity scoring.
+
+## 🏗️ Architecture

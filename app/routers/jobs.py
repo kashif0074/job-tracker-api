@@ -14,7 +14,9 @@ from app.schemas.job import (
     JobResponse,
     JobUpdate,
 )
+from app.services.agent import run_agent
 from app.services.ai_service import get_embedding, extract_skills
+from app.services.graph import upsert_job_graph, get_related_skills
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -143,63 +145,116 @@ def analyze_job(
     current_user: User = Depends(get_current_user),
 ):
     job = _get_owned_job_or_404(db, job_id, current_user)
-    
+
     if not job.description:
         raise HTTPException(status_code=400, detail="Job has no description to analyze")
-        
-    # 1. Extract skills (Groq LLM)
+
+    # 1. Extract skills via Groq LLM
     skills_dict = extract_skills(job.description)
-    
-    # 2. Generate embedding (Local SentenceTransformer)
+
+    # 2. Generate local embedding
     text_to_embed = f"{job.title} at {job.company}. {job.description}"
     embedding_vector = get_embedding(text_to_embed)
-    
+
     # 3. Save to database
     job.embedding = embedding_vector
     db.commit()
     db.refresh(job)
-    
+
     return {
         "message": "Job analyzed successfully",
         "extracted_skills": skills_dict,
-        "has_embedding": True
+        "has_embedding": True,
     }
 
 
 @router.get("/{job_id}/match")
 def match_resume_to_job(
-    job_id: int, 
-    resume_text: str, 
-    db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
+    job_id: int,
+    resume_text: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Calculate the similarity between a resume and a job.
-    Uses pure Python cosine similarity to avoid DB type-casting issues.
+    Calculate the similarity between a resume and a job using pure Python cosine similarity.
     """
     job = _get_owned_job_or_404(db, job_id, current_user)
-    
+
     if job.embedding is None:
         raise HTTPException(status_code=400, detail="Run POST /analyze on this job first")
-        
-    # 1. Embed the resume
+
     resume_embedding = get_embedding(resume_text)
-    
-    # 2. Ensure job.embedding is a standard list of floats
     job_embedding = list(job.embedding)
-    
-    # 3. Pure Python Cosine Similarity: dot(A, B) / (||A|| * ||B||)
+
     dot_product = sum(a * b for a, b in zip(resume_embedding, job_embedding))
     mag_a = sum(x * x for x in resume_embedding) ** 0.5
     mag_b = sum(x * x for x in job_embedding) ** 0.5
-    
+
     if mag_a == 0 or mag_b == 0:
         raise HTTPException(status_code=500, detail="Zero-magnitude embedding error")
-        
+
     similarity_score = float(dot_product / (mag_a * mag_b))
-    
+
     return {
         "job_title": job.title,
         "match_score_percentage": round(similarity_score * 100, 2),
-        "verdict": "Strong Match" if similarity_score > 0.8 else "Weak Match"
+        "verdict": "Strong Match" if similarity_score > 0.8 else "Weak Match",
     }
+
+
+@router.post("/agent/scrape-and-save")
+async def agent_scrape_and_save(
+    url: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Agentic endpoint: scrapes a job URL, extracts skills, saves everything to DB and Neo4j.
+    """
+    prompt = f"""
+    Your task is to:
+    1. Scrape this job URL using the scrape_job tool: {url}
+    2. Extract skills from the description using extract_skills_from_text.
+    3. Return a summary with the title and the extracted skills.
+
+    Do not guess. Use the tools.
+    """
+
+    result_text = await run_agent(prompt)
+
+    # Try to extract the title from the agent's output
+    # LLM outputs usually start with "Job Title: X" or similar
+    first_line = result_text.split("\n")[0].strip()
+    if ":" in first_line:
+        detected_title = first_line.split(":", 1)[1].strip().strip("*").strip()
+    else:
+        detected_title = first_line.strip("*").strip()
+
+    job = Job(
+        user_id=current_user.id,
+        title=detected_title[:200] if detected_title else "Auto-Scraped Job",
+        company="Unknown",
+        status="saved",
+        description=result_text[:2000],
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    return {
+        "message": "Agent completed",
+        "job_id": job.id,
+        "agent_output": result_text[:500],
+    }
+
+
+@router.get("/graph/related-skills/{skill}")
+def related_skills(
+    skill: str,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    GraphRAG: Returns skills that frequently co-occur with a given skill.
+    """
+    skills = get_related_skills(skill)
+    return {"skill": skill, "related": skills}
