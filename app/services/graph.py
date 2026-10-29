@@ -5,7 +5,14 @@ NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password123")
 
-driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+# Lazy-loaded driver to prevent CI import failures
+_driver = None
+
+def get_driver():
+    global _driver
+    if _driver is None:
+        _driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+    return _driver
 
 
 def upsert_job_graph(job_id: int, title: str, company: str, skills: dict):
@@ -19,7 +26,7 @@ def upsert_job_graph(job_id: int, title: str, company: str, skills: dict):
         + skills.get("ai_tools", [])
     )
 
-    with driver.session() as session:
+    with get_driver().session() as session:
         session.run(
             """
             MERGE (j:Job {id: $job_id})
@@ -43,7 +50,7 @@ def get_related_skills(skill_name: str, limit: int = 10) -> list[str]:
     GraphRAG: Given a skill, find other skills that appear in jobs
     that also require this skill.
     """
-    with driver.session() as session:
+    with get_driver().session() as session:
         result = session.run(
             """
             MATCH (s1:Skill {name: $skill})<-[:REQUIRES]-(j:Job)-[:REQUIRES]->(s2:Skill)
